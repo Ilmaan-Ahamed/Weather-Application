@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import Search from "../search";
 
+function kelvinToCelsius(k) {
+  if (!k && k !== 0) return "--";
+  return Math.round(k - 273.15);
+}
+
 export default function Weather() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [weatherData, setWeatherData] = useState(null);
 
   async function fetchWeatherData(param) {
+    if (!param) return;
     setLoading(true);
     try {
       const response = await fetch(
@@ -14,22 +20,25 @@ export default function Weather() {
       );
 
       const data = await response.json();
-      if (data) {
+      if (data && data.cod !== "404") {
         setWeatherData(data);
-        setLoading(false);
+      } else {
+        setWeatherData(null);
       }
     } catch (e) {
-      setLoading(false);
       console.log(e);
+      setWeatherData(null);
+    } finally {
+      setLoading(false);
     }
   }
 
-  async function handleSearch() {
-    fetchWeatherData(search);
+  function handleSearch() {
+    if (search && search.trim().length > 0) fetchWeatherData(search.trim());
   }
 
   function getCurrentDate() {
-    return new Date().toLocaleDateString("en-us", {
+    return new Date().toLocaleDateString("en-US", {
       weekday: "long",
       month: "long",
       day: "numeric",
@@ -38,48 +47,52 @@ export default function Weather() {
   }
 
   useEffect(() => {
-    fetchWeatherData("bangalore");
+    fetchWeatherData("Bangalore");
   }, []);
 
-  console.log(weatherData);
+  const iconCode = weatherData?.weather && weatherData.weather[0]?.icon;
 
   return (
-    <div>
-      <Search
-        search={search}
-        setSearch={setSearch}
-        handleSearch={handleSearch}
-      />
+    <div className="weather-root">
+      <Search search={search} setSearch={setSearch} handleSearch={handleSearch} />
+
       {loading ? (
         <div className="loading">Loading...</div>
       ) : (
-        <div>
-          <div className="city-name">
-            <h2>
-              {weatherData?.name}, <span>{weatherData?.sys?.country}</span>
-            </h2>
+        <div className="weather-card">
+          <div className="weather-header">
+            <div className="city-name">
+              <h2>
+                {weatherData?.name || "Unknown"}, <span>{weatherData?.sys?.country || "--"}</span>
+              </h2>
+              <p className="date">{getCurrentDate()}</p>
+            </div>
+            {iconCode ? (
+              <img
+                className="weather-icon"
+                src={`https://openweathermap.org/img/wn/${iconCode}@4x.png`}
+                alt={weatherData?.weather?.[0]?.description || "weather icon"}
+              />
+            ) : null}
           </div>
-          <div className="date">
-            <span>{getCurrentDate()}</span>
+
+          <div className="main-info">
+            <div className="temp">{kelvinToCelsius(weatherData?.main?.temp)}°C</div>
+            <p className="description">{weatherData?.weather?.[0]?.description || "-"}</p>
           </div>
-          <div className="temp">{weatherData?.main?.temp}</div>
-          <p className="description">
-            {weatherData && weatherData.weather && weatherData.weather[0]
-              ? weatherData.weather[0].description
-              : ""}
-          </p>
+
           <div className="weather-info">
             <div className="column">
-              <div>
-                <p className="wind">{weatherData?.wind?.speed}</p>
-                <p>Wind Speed</p>
-              </div>
+              <p className="label">Wind</p>
+              <p className="value">{weatherData?.wind?.speed ? `${weatherData.wind.speed} m/s` : "--"}</p>
             </div>
             <div className="column">
-              <div>
-                <p className="humidity">{weatherData?.main?.humidity}%</p>
-                <p>Humidity</p>
-              </div>
+              <p className="label">Humidity</p>
+              <p className="value">{weatherData?.main?.humidity ? `${weatherData.main.humidity}%` : "--"}</p>
+            </div>
+            <div className="column">
+              <p className="label">Pressure</p>
+              <p className="value">{weatherData?.main?.pressure ? `${weatherData.main.pressure} hPa` : "--"}</p>
             </div>
           </div>
         </div>
