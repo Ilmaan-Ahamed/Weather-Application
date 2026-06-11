@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Search from "../search";
 
-const API_KEY = "e34b4c51d8c2b7bf48d5217fe52ff79e";
+const API_KEY = import.meta.env.VITE_OPENWEATHER_KEY;
 
 function kelvinToCelsius(k) {
   if (k === undefined || k === null) return null;
@@ -43,6 +43,14 @@ export default function Weather() {
     setError(null);
     if (!city && (lat === undefined || lon === undefined)) return;
     setLoading(true);
+    if (!API_KEY) {
+      setError("Missing OpenWeather API key. See README and .env.example");
+      setWeatherData(null);
+      setForecast(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       let url = "";
       if (city) url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}`;
@@ -52,15 +60,39 @@ export default function Weather() {
       const data = await response.json();
       if (!response.ok) {
         setWeatherData(null);
+        setForecast(null);
         setError(data?.message || "Failed to fetch");
       } else {
         setWeatherData(data);
+        // fetch 5-day forecast (One Call) using coords
+        const { coord } = data;
+        if (coord?.lat !== undefined && coord?.lon !== undefined) {
+          fetchForecast(coord.lat, coord.lon);
+        }
       }
     } catch (e) {
       setWeatherData(null);
       setError("Network error");
     } finally {
       setLoading(false);
+    }
+  }
+
+  const [forecast, setForecast] = useState(null);
+
+  async function fetchForecast(lat, lon) {
+    try {
+      // Exclude minutely,hourly,alerts to keep only current + daily
+      const url = `https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly,alerts&appid=${API_KEY}`;
+      const res = await fetch(url);
+      const d = await res.json();
+      if (!res.ok) {
+        setForecast(null);
+      } else {
+        setForecast(d);
+      }
+    } catch (e) {
+      setForecast(null);
     }
   }
 
@@ -138,11 +170,11 @@ export default function Weather() {
       </div>
 
       {loading ? (
-        <div className="loading">Loading...</div>
+        <div className="loading" role="status" aria-live="polite">Loading...</div>
       ) : (
-        <div className="weather-card">
+        <div className="weather-card" tabIndex={0} aria-live="polite">
           {error && (
-            <div style={{color:'#ffcc00',marginBottom:10,fontWeight:700}}>{error}</div>
+            <div role="status" aria-live="polite" style={{color:'#ffcc00',marginBottom:10,fontWeight:700}}>{error}</div>
           )}
 
           <div className="weather-header">
@@ -180,6 +212,25 @@ export default function Weather() {
               <p className="value">{weatherData?.main?.pressure ? `${weatherData.main.pressure} hPa` : "--"}</p>
             </div>
           </div>
+
+          {/* Forecast panel: show next 5 days if available */}
+          {forecast && forecast.daily && (
+            <div className="forecast" style={{marginTop:18}}>
+              {forecast.daily.slice(1,6).map((d, idx) => {
+                const day = new Date(d.dt * 1000).toLocaleDateString('en-US', { weekday: 'short' });
+                const icon = d.weather?.[0]?.icon;
+                const min = unit === 'C' ? kelvinToCelsius(d.temp.min) : kelvinToFahrenheit(d.temp.min);
+                const max = unit === 'C' ? kelvinToCelsius(d.temp.max) : kelvinToFahrenheit(d.temp.max);
+                return (
+                  <div key={idx} className="forecast-day" aria-label={`Forecast ${day}`}>
+                    <div className="forecast-day-name">{day}</div>
+                    {icon ? <img src={`https://openweathermap.org/img/wn/${icon}@2x.png`} alt={d.weather?.[0]?.description || ''} /> : null}
+                    <div className="forecast-temp">{max}° / {min}°</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
